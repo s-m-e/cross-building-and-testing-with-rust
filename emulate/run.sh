@@ -50,7 +50,7 @@ build="$root/emulate/build/$arch"
 
 [ -f "$assets/boot/vmlinuz" ] || { echo "run.sh: Alpine assets for $arch missing — run 'just emulate-setup'" >&2; exit 1; }
 [ -d "$assets/modules" ]      || { echo "run.sh: kernel modules for $arch missing — run 'just emulate-setup'" >&2; exit 1; }
-[ -f "$binary" ]              || { echo "run.sh: binary missing — run 'just emulate-build-$arch' first ($binary)" >&2; exit 1; }
+[ -f "$binary" ]              || { echo "run.sh: binary missing — run 'just emulate-build' first ($binary)" >&2; exit 1; }
 [ -z "$fw" ] || [ -f "$fw" ]  || { echo "run.sh: UEFI firmware $fw missing — run 'sudo apt install qemu-efi-aarch64'" >&2; exit 1; }
 
 # --- assemble the initramfs: Alpine root filesystem + binary + drivers -----
@@ -67,11 +67,15 @@ chmod +x "$build/root/init" "$build/root/crossdemo"
 # --- boot the guest --------------------------------------------------------
 echo ">>> $arch: booting Alpine guest with an emulated NIC ($nic)"
 echo
+# `-display none -serial stdio -monitor none` puts the guest serial console
+# on stdio with no QEMU monitor. `timeout --foreground` keeps qemu in the
+# foreground process group so that, when launched from an interactive
+# terminal, reading the serial console does not raise SIGTTIN and suspend it.
 # shellcheck disable=SC2086
-exec timeout 240 $qemu -m 512 \
+exec timeout --foreground 240 $qemu -m 512 \
     ${fw:+-bios "$fw"} \
     -kernel "$assets/boot/vmlinuz" \
     -initrd "$build/initramfs.cpio.gz" \
     -append "console=$console quiet" \
     -device "$nic" \
-    -nographic -no-reboot
+    -display none -serial stdio -monitor none -no-reboot
