@@ -117,43 +117,73 @@ The native x86_64 build needs no cross toolchain or emulator — only the host
 C compiler for the `build.rs` glibc probe. The cross toolchains above supply
 the C compiler used for the ARM probes.
 
-## Building and testing with `just`
+## Building, testing and running with `just`
 
-Run `just <recipe>` from the project root.
+Run `just <recipe>` from the project root; plain `just` lists every recipe.
 
-### Build
+The recipes come in two parallel families that demonstrate two different
+cross-compilation methods:
 
-| Recipe         | Action                                            |
-|----------------|---------------------------------------------------|
-| `just`         | default — build release binaries for all targets  |
-| `just build`   | build all three targets                           |
-| `just x86_64`  | build only the native x86_64 binary               |
-| `just armv7`   | build only the ARMv7 (32-bit) binary              |
-| `just armv8`   | build only the ARMv8 (64-bit) binary              |
+- **`host-*`** — uses the cross-toolchains installed on the host and runs the
+  ARM binaries under qemu-user (configured via `.cargo/config.toml`). This is
+  the method the [Prerequisites](#prerequisites) section sets up.
+- **`cross-*`** — uses [`cross`](https://github.com/cross-rs/cross), which
+  builds, tests and runs each target inside a prebuilt Docker image.
 
-### Test
+Each family offers `build`, `test` and `run`, for all targets at once or for
+one target individually.
 
-| Recipe              | Action                                                  |
-|---------------------|---------------------------------------------------------|
-| `just test`         | run the suite on all targets (x86_64 native, ARM via qemu) |
-| `just test-x86_64`  | test only the native x86_64 build                       |
-| `just test-armv7`   | test the ARMv7 build under qemu-user                    |
-| `just test-armv8`   | test the ARMv8 build under qemu-user                    |
+### host-\* — host toolchain + qemu-user
 
-### Run
+| Recipe                    | Action                                              |
+|---------------------------|-----------------------------------------------------|
+| `just host-build`         | build all three targets                             |
+| `just host-build-x86_64`  | build only the native x86_64 binary                 |
+| `just host-build-armv7`   | build only the ARMv7 (32-bit) binary                |
+| `just host-build-armv8`   | build only the ARMv8 (64-bit) binary                |
+| `just host-test`          | test all targets (x86_64 native, ARM via qemu-user) |
+| `just host-test-x86_64`   | test only the native x86_64 build                   |
+| `just host-test-armv7`    | test the ARMv7 build under qemu-user                |
+| `just host-test-armv8`    | test the ARMv8 build under qemu-user                |
+| `just host-run`           | build and run all targets                           |
+| `just host-run-x86_64`    | run only the native x86_64 build                    |
+| `just host-run-armv7`     | run the ARMv7 build under qemu-user                 |
+| `just host-run-armv8`     | run the ARMv8 build under qemu-user                 |
 
-| Recipe             | Action                                                   |
-|--------------------|----------------------------------------------------------|
-| `just run`         | build and run the binary on all targets (x86_64 native, ARM via qemu) |
-| `just run-x86_64`  | run only the native x86_64 build                         |
-| `just run-armv7`   | run the ARMv7 build under qemu-user                      |
-| `just run-armv8`   | run the ARMv8 build under qemu-user                      |
+### cross-\* — Docker-based, via `cross`
+
+`cross` runs each target inside a prebuilt Docker image that bundles the
+toolchain *and* qemu, so these recipes need **none** of the host packages
+from [Prerequisites](#prerequisites) — only a running Docker daemon and the
+`cross` binary (`cargo install cross`). Notes:
+
+- The first invocation per target pulls a Docker image (a few hundred MB).
+- `cross` supplies its own linker/runner inside the container and ignores
+  the keys in `.cargo/config.toml`.
+- For the host triple (x86_64) `cross` may build directly on the host
+  instead of in a container.
+
+| Recipe                     | Action                                  |
+|----------------------------|-----------------------------------------|
+| `just cross-build`         | build all three targets via cross       |
+| `just cross-build-x86_64`  | build only the x86_64 binary via cross  |
+| `just cross-build-armv7`   | build only the ARMv7 binary via cross   |
+| `just cross-build-armv8`   | build only the ARMv8 binary via cross   |
+| `just cross-test`          | test all three targets via cross        |
+| `just cross-test-x86_64`   | test only the x86_64 build via cross    |
+| `just cross-test-armv7`    | test the ARMv7 build via cross          |
+| `just cross-test-armv8`    | test the ARMv8 build via cross          |
+| `just cross-run`           | build and run all targets via cross     |
+| `just cross-run-x86_64`    | run only the x86_64 build via cross     |
+| `just cross-run-armv7`     | run the ARMv7 build via cross           |
+| `just cross-run-armv8`     | run the ARMv8 build via cross           |
 
 ### Other
 
-| Recipe        | Action                       |
-|---------------|------------------------------|
-| `just clean`  | remove all build artifacts   |
+| Recipe        | Action                     |
+|---------------|----------------------------|
+| `just`        | list all recipes           |
+| `just clean`  | remove all build artifacts |
 
 Built binaries land in `target/<triple>/release/crossdemo`.
 
@@ -164,16 +194,16 @@ does for the host — no manual rebuilds required:
 
 - **Builds are per-target.** Each triple gets its own directory under
   `target/` (e.g. `target/aarch64-unknown-linux-gnu/`) with an independent
-  fingerprint database. Editing a source file and re-running `just run-armv7`
-  recompiles only what changed for that target.
+  fingerprint database. Editing a source file and re-running
+  `just host-run-armv7` recompiles only what changed for that target.
 - **The cross settings are not command-line arguments.** The `linker` and
   `runner` live in `.cargo/config.toml`, which Cargo re-reads on every
   invocation — so they are applied automatically and nothing is lost between
-  runs. The `just` recipes are plain `cargo build/run/test --target <triple>`.
+  runs. The `host-*` recipes are plain `cargo build/run/test --target <triple>`.
 - **Targets do not invalidate each other.** Because the build directories are
-  separate, alternating between architectures (e.g. `just run-armv7` and
-  `just run-x86_64`) does not cause rebuild thrashing — each keeps its own
-  warm incremental cache.
+  separate, alternating between architectures (e.g. `just host-run-armv7` and
+  `just host-run-x86_64`) does not cause rebuild thrashing — each keeps its
+  own warm incremental cache.
 - **Caveat — first build per target.** The *initial* build of a given triple
   is a full build (it must compile dependencies and link against that
   target's std from scratch). Every change after that is incremental.

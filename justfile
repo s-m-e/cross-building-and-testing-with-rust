@@ -1,4 +1,8 @@
-# crossdemo — build for x86_64, ARMv7 (32-bit) and ARMv8 (64-bit).
+# crossdemo — build/test/run for x86_64, ARMv7 (32-bit) and ARMv8 (64-bit).
+#
+# Two parallel families of recipes demonstrate two cross-compilation methods:
+#   host-*   uses the host's cross-toolchain + qemu-user (see .cargo/config.toml)
+#   cross-*  uses `cross`, which works inside prebuilt Docker images
 
 # Cargo target triples for the three supported platforms.
 x86_64 := "x86_64-unknown-linux-gnu"
@@ -8,58 +12,121 @@ armv8  := "aarch64-unknown-linux-gnu"
 default:
     @just --list
 
-# Build for every supported target.
-build: (build-target x86_64) (build-target armv7) (build-target armv8)
+# === host: host cross-toolchain + qemu-user ===============================
+#
+# These recipes use the cross-compilers installed on the host and run the
+# ARM binaries under qemu-user, configured via the `linker`/`runner` keys in
+# .cargo/config.toml.
 
-# Build a release binary for a single target triple, installing the
-# matching Rust standard library first if necessary.
-build-target triple:
+# Build every target with the host toolchain.
+host-build: (host-build-target x86_64) (host-build-target armv7) (host-build-target armv8)
+
+# Build a release binary for a single target triple with the host toolchain.
+host-build-target triple:
     cargo build --release --target {{triple}}
 
 # Build only the native x86_64 binary.
-x86_64: (build-target x86_64)
+host-build-x86_64: (host-build-target x86_64)
 
 # Build only the ARMv7 (32-bit) binary.
-armv7: (build-target armv7)
+host-build-armv7: (host-build-target armv7)
 
 # Build only the ARMv8 (64-bit) binary.
-armv8: (build-target armv8)
+host-build-armv8: (host-build-target armv8)
 
-# Run the test suite for every target: x86_64 natively, ARMv7 and ARMv8
-# under qemu-user (see the `runner` keys in .cargo/config.toml).
-test: (test-target x86_64) (test-target armv7) (test-target armv8)
+# Run the test suite for every target (x86_64 native, ARMv7/ARMv8 via qemu-user).
+host-test: (host-test-target x86_64) (host-test-target armv7) (host-test-target armv8)
 
-# Run the test suite for a single target triple. ARM targets are executed
-# transparently under qemu-user via the configured Cargo runner.
-test-target triple:
+# Run the test suite for a single target triple (ARM via qemu-user).
+host-test-target triple:
     cargo test --target {{triple}}
 
 # Test only the native x86_64 build.
-test-x86_64: (test-target x86_64)
+host-test-x86_64: (host-test-target x86_64)
 
 # Test the ARMv7 (32-bit) build under qemu-user.
-test-armv7: (test-target armv7)
+host-test-armv7: (host-test-target armv7)
 
 # Test the ARMv8 (64-bit) build under qemu-user.
-test-armv8: (test-target armv8)
+host-test-armv8: (host-test-target armv8)
 
-# Build and run the binary for every target: x86_64 natively, ARMv7 and
-# ARMv8 under qemu-user (see the `runner` keys in .cargo/config.toml).
-run: (run-target x86_64) (run-target armv7) (run-target armv8)
+# Build and run the binary for every target (x86_64 native, ARMv7/ARMv8 via qemu-user).
+host-run: (host-run-target x86_64) (host-run-target armv7) (host-run-target armv8)
 
-# Build and run the binary for a single target triple. ARM targets are
-# executed transparently under qemu-user via the configured Cargo runner.
-run-target triple:
+# Build and run the binary for a single target triple (ARM via qemu-user).
+host-run-target triple:
     cargo run --target {{triple}}
 
 # Run only the native x86_64 build.
-run-x86_64: (run-target x86_64)
+host-run-x86_64: (host-run-target x86_64)
 
 # Run the ARMv7 (32-bit) build under qemu-user.
-run-armv7: (run-target armv7)
+host-run-armv7: (host-run-target armv7)
 
 # Run the ARMv8 (64-bit) build under qemu-user.
-run-armv8: (run-target armv8)
+host-run-armv8: (host-run-target armv8)
+
+# === cross: Docker-based cross-compilation ================================
+#
+# `cross` is a drop-in cargo replacement that builds, tests and runs each
+# target inside a prebuilt Docker image carrying the toolchain *and* qemu.
+# It needs no host cross-toolchain, no `rustup target add` and no qemu-user
+# install — everything ships in the container. It also supplies its own
+# `linker`/`runner` inside the container, ignoring the keys in
+# .cargo/config.toml. Requires a running Docker daemon.
+#
+# Note: for the host triple (x86_64) cross may skip the container and build
+# directly on the host.
+
+# Build every target with cross.
+cross-build: (cross-build-target x86_64) (cross-build-target armv7) (cross-build-target armv8)
+
+# Build a single target triple with cross.
+cross-build-target triple:
+    cross build --release --target {{triple}}
+
+# Build only the x86_64 binary with cross.
+cross-build-x86_64: (cross-build-target x86_64)
+
+# Build only the ARMv7 (32-bit) binary with cross.
+cross-build-armv7: (cross-build-target armv7)
+
+# Build only the ARMv8 (64-bit) binary with cross.
+cross-build-armv8: (cross-build-target armv8)
+
+# Test every target with cross (ARM via the image's bundled qemu).
+cross-test: (cross-test-target x86_64) (cross-test-target armv7) (cross-test-target armv8)
+
+# Test a single target triple with cross.
+cross-test-target triple:
+    cross test --target {{triple}}
+
+# Test only the x86_64 build with cross.
+cross-test-x86_64: (cross-test-target x86_64)
+
+# Test the ARMv7 (32-bit) build with cross.
+cross-test-armv7: (cross-test-target armv7)
+
+# Test the ARMv8 (64-bit) build with cross.
+cross-test-armv8: (cross-test-target armv8)
+
+# Build and run every target with cross (ARM via the image's bundled qemu).
+cross-run: (cross-run-target x86_64) (cross-run-target armv7) (cross-run-target armv8)
+
+# Build and run a single target triple with cross.
+cross-run-target triple:
+    cross run --target {{triple}}
+
+# Run only the x86_64 build with cross.
+cross-run-x86_64: (cross-run-target x86_64)
+
+# Run the ARMv7 (32-bit) build with cross.
+cross-run-armv7: (cross-run-target armv7)
+
+# Run the ARMv8 (64-bit) build with cross.
+cross-run-armv8: (cross-run-target armv8)
+
+# === utilities ============================================================
 
 # Remove all build artifacts.
 clean:
