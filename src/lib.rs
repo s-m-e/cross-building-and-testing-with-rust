@@ -80,6 +80,17 @@ pub fn glibc_version() -> Option<String> {
     None
 }
 
+/// glibc version the binary was **compiled against**, baked in at build time
+/// by `build.rs` from the `__GLIBC__` / `__GLIBC_MINOR__` header macros.
+///
+/// This is distinct from [`glibc_version`], which reports the glibc actually
+/// loaded at runtime. The two differ when a binary is built against one
+/// glibc and run against another. Returns `None` for non-glibc targets or
+/// when the build-time probe could not determine the version.
+pub fn glibc_build_version() -> Option<&'static str> {
+    option_env!("GLIBC_BUILD_VERSION")
+}
+
 /// Convert a NUL-terminated C string field into an owned [`String`].
 ///
 /// `c_char` is signed on x86_64 but unsigned on ARM, so we deliberately work
@@ -123,7 +134,10 @@ pub struct PlatformInfo {
     pub pointer_bits: usize,
     pub libc_kind: &'static str,
     pub linkage: &'static str,
+    /// glibc version loaded at runtime.
     pub glibc_version: Option<String>,
+    /// glibc version the binary was compiled against.
+    pub glibc_build_version: Option<&'static str>,
     /// `(sysname, release, version, machine)` from `uname(2)`, if available.
     pub kernel: Option<(String, String, String, String)>,
 }
@@ -141,6 +155,7 @@ impl PlatformInfo {
             libc_kind: libc_kind(),
             linkage: linkage(),
             glibc_version: glibc_version(),
+            glibc_build_version: glibc_build_version(),
             kernel,
         }
     }
@@ -170,11 +185,15 @@ impl fmt::Display for PlatformInfo {
         }
 
         writeln!(f, "C library:")?;
-        writeln!(f, "  type             : {}", self.libc_kind)?;
-        writeln!(f, "  linkage          : {}", self.linkage)?;
+        writeln!(f, "  type                  : {}", self.libc_kind)?;
+        writeln!(f, "  linkage               : {}", self.linkage)?;
         match &self.glibc_version {
-            Some(v) => writeln!(f, "  glibc version    : {v}")?,
-            None => writeln!(f, "  glibc version    : n/a (not linked against glibc)")?,
+            Some(v) => writeln!(f, "  glibc (runtime)       : {v}")?,
+            None => writeln!(f, "  glibc (runtime)       : n/a (not linked against glibc)")?,
+        }
+        match &self.glibc_build_version {
+            Some(v) => writeln!(f, "  glibc (built against) : {v}")?,
+            None => writeln!(f, "  glibc (built against) : unknown")?,
         }
 
         Ok(())
@@ -243,6 +262,21 @@ mod tests {
                 assert!(v.chars().next().is_some_and(|c| c.is_ascii_digit()));
             }
             None => assert!(!cfg!(target_env = "gnu")),
+        }
+    }
+
+    /// When the build-time probe produced a glibc version it must be a plain
+    /// `major.minor` pair. A missing value (probe skipped/failed) is allowed.
+    #[test]
+    fn glibc_build_version_is_plausible() {
+        if let Some(v) = glibc_build_version() {
+            let mut parts = v.split('.');
+            let major = parts.next().and_then(|s| s.parse::<u32>().ok());
+            let minor = parts.next().and_then(|s| s.parse::<u32>().ok());
+            assert!(
+                major.is_some() && minor.is_some() && parts.next().is_none(),
+                "unexpected glibc build version: {v:?}"
+            );
         }
     }
 }

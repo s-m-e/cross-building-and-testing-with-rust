@@ -18,8 +18,14 @@ When run, `crossdemo` prints:
 - **Operating system** — kernel name and release (the `uname -r` equivalent)
   plus the full kernel version, obtained via the `uname(2)` syscall.
 - **C library** — the libc flavour (glibc vs musl, determined at compile
-  time), how the C runtime is linked (static/dynamic), and — when linked
-  against glibc — the runtime glibc version via `gnu_get_libc_version()`.
+  time), how the C runtime is linked (static/dynamic), and two glibc
+  versions:
+  - **runtime** — the glibc actually loaded into the process, read via
+    `gnu_get_libc_version()`.
+  - **built against** — the glibc the binary was *compiled* against, baked
+    in at build time by `build.rs` from the `__GLIBC__` / `__GLIBC_MINOR__`
+    header macros. When this differs from the runtime value, the binary was
+    built on one glibc and run against another.
 
 Example output (ARMv8 build, run under emulation):
 
@@ -35,9 +41,10 @@ Operating system:
   kernel           : Linux 6.8.0-117-generic
   kernel version   : #117~22.04.1-Ubuntu SMP ...
 C library:
-  type             : glibc (GNU C Library)
-  linkage          : dynamic
-  glibc version    : 2.35
+  type                  : glibc (GNU C Library)
+  linkage               : dynamic
+  glibc (runtime)       : 2.35
+  glibc (built against) : 2.35
 ```
 
 ## Project layout
@@ -45,6 +52,7 @@ C library:
 ```
 crossdemo/
 ├── Cargo.toml
+├── build.rs                bakes in the compile-time glibc version
 ├── justfile                build/test recipes for all three targets
 ├── README.md
 ├── .cargo/config.toml      cross-linkers + qemu-user runners (in-repo)
@@ -63,6 +71,8 @@ The suite lives in `src/lib.rs` and runs on every architecture:
   for x86_64, 32-bit ARMv7, 64-bit ARMv8, and panics on anything else.
 - `glibc_version_matches_libc_kind` — glibc builds report a version,
   non-glibc builds do not.
+- `glibc_build_version_is_plausible` — the baked-in compile-time glibc
+  version, when present, is a well-formed `major.minor` pair.
 
 The ARM test binaries are executed under **qemu user-mode emulation**, wired
 up via the `runner` keys in `.cargo/config.toml`.
@@ -91,9 +101,15 @@ sudo apt install gcc-arm-linux-gnueabihf gcc-aarch64-linux-gnu
 # qemu user-mode emulation — runs the ARM binaries and test suites on an
 # x86_64 host (provides qemu-arm and qemu-aarch64).
 sudo apt install qemu-user
+
+# Host C compiler — build.rs preprocesses <features.h> to read the
+# compile-time glibc version. Usually already present on a dev machine.
+sudo apt install gcc
 ```
 
-The native x86_64 build needs no cross toolchain or emulator.
+The native x86_64 build needs no cross toolchain or emulator — only the host
+C compiler for the `build.rs` glibc probe. The cross toolchains above supply
+the C compiler used for the ARM probes.
 
 ## Building and testing with `just`
 
