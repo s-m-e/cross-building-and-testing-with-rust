@@ -1,5 +1,7 @@
 # Cross-Building & Cross-Testing
 
+Slides & code.
+
 Rust User Group Leipzig 2026-05-19
 
 ## Synosis
