@@ -1,0 +1,4 @@
+# Downloaded Alpine guest assets and generated initramfs images — large and
+# reproducible, so never committed. Re-create them with `just emulate-setup`.
+assets/
+build/

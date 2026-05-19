@@ -6,6 +6,10 @@
 use std::ffi::CStr;
 use std::fmt;
 
+/// Network-hardware probing. Compiled in only with the `hardware` feature.
+#[cfg(feature = "hardware")]
+pub mod hardware;
+
 /// Program name, taken from the Cargo manifest at build time.
 pub const NAME: &str = env!("CARGO_PKG_NAME");
 /// Program version, taken from the Cargo manifest at build time.
@@ -140,6 +144,10 @@ pub struct PlatformInfo {
     pub glibc_build_version: Option<&'static str>,
     /// `(sysname, release, version, machine)` from `uname(2)`, if available.
     pub kernel: Option<(String, String, String, String)>,
+    /// First physical network interface and the hardware behind it.
+    /// Present only when built with the `hardware` feature.
+    #[cfg(feature = "hardware")]
+    pub network: Option<hardware::NetworkDevice>,
 }
 
 impl PlatformInfo {
@@ -157,6 +165,8 @@ impl PlatformInfo {
             glibc_version: glibc_version(),
             glibc_build_version: glibc_build_version(),
             kernel,
+            #[cfg(feature = "hardware")]
+            network: hardware::probe_first_nic(),
         }
     }
 }
@@ -194,6 +204,31 @@ impl fmt::Display for PlatformInfo {
         match &self.glibc_build_version {
             Some(v) => writeln!(f, "  glibc (built against) : {v}")?,
             None => writeln!(f, "  glibc (built against) : unknown")?,
+        }
+
+        #[cfg(feature = "hardware")]
+        {
+            writeln!(f, "Network hardware:")?;
+            match &self.network {
+                Some(nic) => {
+                    writeln!(f, "  interface             : {}", nic.interface)?;
+                    writeln!(
+                        f,
+                        "  driver                : {}",
+                        nic.driver.as_deref().unwrap_or("unknown")
+                    )?;
+                    match &nic.pci_id {
+                        Some((v, d)) => writeln!(f, "  pci id                : {v}:{d}")?,
+                        None => writeln!(f, "  pci id                : n/a")?,
+                    }
+                    writeln!(
+                        f,
+                        "  model                 : {}",
+                        nic.model.unwrap_or("unrecognised")
+                    )?;
+                }
+                None => writeln!(f, "  (no physical network interface found)")?,
+            }
         }
 
         Ok(())

@@ -12,6 +12,11 @@ path = "src/lib.rs"
 name = "crossdemo"
 path = "src/main.rs"
 
+[features]
+# Enables network-hardware probing (src/hardware.rs). Off by default; the
+# `emulate-*` justfile recipes build with it on. See README.
+hardware = []
+
 [dependencies]
 libc = "0.2"
 

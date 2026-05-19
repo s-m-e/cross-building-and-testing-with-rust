@@ -9,6 +9,12 @@ x86_64 := "x86_64-unknown-linux-gnu"
 armv7  := "armv7-unknown-linux-gnueabihf"
 armv8  := "aarch64-unknown-linux-gnu"
 
+# Static-musl triples used by the `emulate-*` recipes (the Alpine guests are
+# a musl distro).
+x86_64_musl := "x86_64-unknown-linux-musl"
+armv7_musl  := "armv7-unknown-linux-musleabihf"
+armv8_musl  := "aarch64-unknown-linux-musl"
+
 default:
     @just --list
 
@@ -178,8 +184,75 @@ cross-exec-armv8:
       ghcr.io/cross-rs/{{armv8}}:{{cross_tag}} \
       qemu-aarch64 -L /usr/aarch64-linux-gnu target/{{armv8}}/release/crossdemo
 
+# === emulate: full-system emulation with emulated hardware ================
+#
+# Boots the binary inside a real qemu-system VM running an Alpine kernel with
+# an emulated e1000 network card attached. Builds enable the `hardware`
+# Cargo feature, so the demo probes that card and reports its driver/model.
+# Guests are static-musl builds because the Alpine guest is a musl distro.
+#
+# Run `just emulate-setup` once first to download the Alpine guest assets.
+# Requires qemu-system-x86/-arm; x86_64 uses KVM, the ARM guests are fully
+# emulated (slower). armv7 here means the ARMv8 `armv8` recipes map to the
+# aarch64 guest.
+
+# Download the Alpine guest kernels + root filesystems (one-time, ~150 MB).
+emulate-setup:
+    emulate/setup.sh
+
+# Build the hardware-enabled binary for every emulation target.
+emulate-build: emulate-build-x86_64 emulate-build-armv7 emulate-build-armv8
+
+# Build the hardware-enabled binary for a single musl target triple.
+emulate-build-target triple:
+    cargo build --release --target {{triple}} --features hardware
+
+# Build only the x86_64 emulation binary.
+emulate-build-x86_64: (emulate-build-target x86_64_musl)
+
+# Build only the ARMv7 (32-bit) emulation binary.
+emulate-build-armv7: (emulate-build-target armv7_musl)
+
+# Build only the ARMv8 (64-bit) emulation binary.
+emulate-build-armv8: (emulate-build-target armv8_musl)
+
+# Run the test suite with the `hardware` feature active (host-side).
+emulate-test:
+    cargo test --features hardware
+
+# Build, then boot the emulated guest for every architecture.
+emulate-run: emulate-run-x86_64 emulate-run-armv7 emulate-run-armv8
+
+# Build and boot the x86_64 guest.
+emulate-run-x86_64: emulate-build-x86_64 emulate-exec-x86_64
+
+# Build and boot the ARMv7 (32-bit) guest.
+emulate-run-armv7: emulate-build-armv7 emulate-exec-armv7
+
+# Build and boot the ARMv8 (64-bit) guest.
+emulate-run-armv8: emulate-build-armv8 emulate-exec-armv8
+
+# Boot every guest from the already-built binaries, without rebuilding.
+emulate-exec: emulate-exec-x86_64 emulate-exec-armv7 emulate-exec-armv8
+
+# Boot the x86_64 guest from the already-built binary.
+emulate-exec-x86_64:
+    emulate/run.sh x86_64
+
+# Boot the ARMv7 (32-bit) guest from the already-built binary.
+emulate-exec-armv7:
+    emulate/run.sh armv7
+
+# Boot the ARMv8 (64-bit) guest from the already-built binary.
+emulate-exec-armv8:
+    emulate/run.sh aarch64
+
 # === utilities ============================================================
 
 # Remove all build artifacts.
 clean:
     cargo clean
+
+# Remove generated initramfs images (keeps the downloaded Alpine assets).
+emulate-clean:
+    rm -rf emulate/build

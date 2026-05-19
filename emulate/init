@@ -1,0 +1,31 @@
+#!/bin/sh
+# Init process for the crossdemo emulation initramfs.
+#
+# The kernel runs this as PID 1. It brings up just enough of a system to
+# load the driver for the QEMU-emulated network card, run the demo binary
+# (whose `hardware` feature probes that card), and power off.
+#
+# This file is committed; the initramfs around it is assembled by
+# emulate/run.sh from a downloaded Alpine root filesystem.
+
+BB=/bin/busybox
+
+$BB mkdir -p /proc /sys /dev
+$BB mount -t proc     proc /proc
+$BB mount -t sysfs    sys  /sys
+$BB mount -t devtmpfs dev  /dev
+
+# Load drivers for QEMU's emulated NIC so the card shows up under
+# /sys/class/net for the demo to probe. We try every transport/driver the
+# three machine types might present; the irrelevant ones simply fail. The
+# kernel module tree was placed under /lib/modules by emulate/run.sh.
+for mod in e1000 virtio_pci virtio_mmio virtio_net; do
+    $BB modprobe "$mod" 2>/dev/null || true
+done
+
+echo
+/crossdemo || $BB echo "emulate/init: crossdemo exited non-zero"
+echo
+
+# Hand back to QEMU (which runs with -no-reboot, so this exits the VM).
+$BB poweroff -f

@@ -24,3 +24,13 @@ runner = ["qemu-arm", "-L", "/usr/arm-linux-gnueabihf"]
 [target.aarch64-unknown-linux-gnu]
 linker = "aarch64-linux-gnu-gcc"
 runner = ["qemu-aarch64", "-L", "/usr/aarch64-linux-gnu"]
+
+# The static-musl ARM targets used by the `emulate-*` recipes. They still
+# need an architecture-appropriate linker; the cross GCC drivers above serve
+# fine. No runner — these binaries run inside a full qemu-system guest.
+
+[target.armv7-unknown-linux-musleabihf]
+linker = "arm-linux-gnueabihf-gcc"
+
+[target.aarch64-unknown-linux-musl]
+linker = "aarch64-linux-gnu-gcc"
