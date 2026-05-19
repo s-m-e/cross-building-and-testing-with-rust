@@ -188,6 +188,22 @@ from [Prerequisites](#prerequisites) — only a running Docker daemon and the
 | `just cross-run-x86_64`    | run only the x86_64 build via cross     |
 | `just cross-run-armv7`     | run the ARMv7 build via cross           |
 | `just cross-run-armv8`     | run the ARMv8 build via cross           |
+| `just cross-exec`          | run all pre-built binaries, no rebuild  |
+| `just cross-exec-x86_64`   | run the pre-built x86_64 binary         |
+| `just cross-exec-armv7`    | run the pre-built ARMv7 binary          |
+| `just cross-exec-armv8`    | run the pre-built ARMv8 binary          |
+
+The `cross-exec-*` recipes are the cross-side counterpart of `host-exec-*`:
+they **never rebuild** and do not invoke the `cross` binary at all — they are
+a plain `docker run` that executes a pre-built `target/<triple>/release/`
+binary inside the cross Docker image, using that image's qemu and sysroot.
+Running the *same* binary via `host-exec-*` and `cross-exec-*` is a useful
+experiment: the reported `glibc (runtime)` differs because the host and the
+cross image carry different sysroots.
+
+The image tag is set by the `cross_tag` variable at the top of the
+`justfile`; it must match your `cross` version (`"main"` for a git build of
+cross, the version number for a release).
 
 ### Other
 

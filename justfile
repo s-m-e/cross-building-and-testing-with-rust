@@ -98,6 +98,11 @@ host-exec-armv8:
 # Note: for the host triple (x86_64) cross may skip the container and build
 # directly on the host.
 
+# Docker image tag used by the `cross-exec-*` recipes. It must match your
+# `cross` version: a released cross uses its version number (e.g. "0.2.5"),
+# a git build of cross uses "main".
+cross_tag := "main"
+
 # Build every target with cross.
 cross-build: (cross-build-target x86_64) (cross-build-target armv7) (cross-build-target armv8)
 
@@ -145,6 +150,33 @@ cross-run-armv7: (cross-run-target armv7)
 
 # Run the ARMv8 (64-bit) build with cross.
 cross-run-armv8: (cross-run-target armv8)
+
+# Run an *already-built* release binary inside the matching `cross` Docker
+# image — the cross-side counterpart of `host-exec-*`. No rebuild, and the
+# `cross` binary is not involved: this is a plain `docker run` on the public
+# cross image. Build the binary first (e.g. `cross-build-armv7`). The image
+# tag comes from `cross_tag` above.
+
+# Run all three pre-built release binaries inside their cross images.
+cross-exec: cross-exec-x86_64 cross-exec-armv7 cross-exec-armv8
+
+# Run the pre-built x86_64 binary inside the cross image (native, no qemu).
+cross-exec-x86_64:
+    docker run --rm -v "{{justfile_directory()}}":/project -w /project \
+      ghcr.io/cross-rs/{{x86_64}}:{{cross_tag}} \
+      target/{{x86_64}}/release/crossdemo
+
+# Run the pre-built ARMv7 (32-bit) binary inside the cross image via qemu.
+cross-exec-armv7:
+    docker run --rm -v "{{justfile_directory()}}":/project -w /project \
+      ghcr.io/cross-rs/{{armv7}}:{{cross_tag}} \
+      qemu-arm -L /usr/arm-linux-gnueabihf target/{{armv7}}/release/crossdemo
+
+# Run the pre-built ARMv8 (64-bit) binary inside the cross image via qemu.
+cross-exec-armv8:
+    docker run --rm -v "{{justfile_directory()}}":/project -w /project \
+      ghcr.io/cross-rs/{{armv8}}:{{cross_tag}} \
+      qemu-aarch64 -L /usr/aarch64-linux-gnu target/{{armv8}}/release/crossdemo
 
 # === utilities ============================================================
 
