@@ -1,4 +1,8 @@
-# crossdemo
+# Cross-Building & Cross-Testing
+
+Rust User Group Leipzig 2026-05-19
+
+## Synosis
 
 A tiny Rust binary that prints its own name and a description of the platform
 it is running on. It is built and tested for three architectures:
