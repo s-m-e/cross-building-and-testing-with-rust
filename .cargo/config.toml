@@ -1,14 +1,26 @@
-# Cross-compilation linkers.
+# Cross-compilation and emulation configuration.
 #
 # Building the ARM targets requires the corresponding GCC cross toolchains.
 # On Debian/Ubuntu:
 #
 #   sudo apt install gcc-arm-linux-gnueabihf gcc-aarch64-linux-gnu
 #
-# The native x86_64 target needs no special configuration.
+# Running/testing the ARM binaries requires qemu user-mode emulation:
+#
+#   sudo apt install qemu-user
+#
+# The `runner` keys make `cargo run`/`cargo test --target <arm-triple>`
+# execute the produced binary transparently under qemu-user. The `-L` prefix
+# points qemu at the cross sysroot (installed by the libc6-*-cross packages
+# that the GCC cross toolchains pull in) so it can find the ARM dynamic
+# linker and glibc.
+#
+# The native x86_64 target needs no linker, runner or emulator.
 
 [target.armv7-unknown-linux-gnueabihf]
 linker = "arm-linux-gnueabihf-gcc"
+runner = ["qemu-arm", "-L", "/usr/arm-linux-gnueabihf"]
 
 [target.aarch64-unknown-linux-gnu]
 linker = "aarch64-linux-gnu-gcc"
+runner = ["qemu-aarch64", "-L", "/usr/aarch64-linux-gnu"]
