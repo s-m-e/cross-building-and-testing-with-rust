@@ -5,8 +5,8 @@ x86_64 := "x86_64-unknown-linux-gnu"
 armv7  := "armv7-unknown-linux-gnueabihf"
 armv8  := "aarch64-unknown-linux-gnu"
 
-# Build release binaries for all three targets.
-default: build
+default:
+    @just --list
 
 # Build for every supported target.
 build: (build-target x86_64) (build-target armv7) (build-target armv8)
