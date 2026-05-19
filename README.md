@@ -32,6 +32,11 @@ When run, `crossdemo` prints:
     in at build time by `build.rs` from the `__GLIBC__` / `__GLIBC_MINOR__`
     header macros. When this differs from the runtime value, the binary was
     built on one glibc and run against another.
+- **Network hardware** — *only when built with the `hardware` Cargo
+  feature* — the first physical network interface, its kernel driver,
+  PCI/virtio IDs and a friendly chip name, all read from sysfs. The
+  `emulate-*` recipes enable this feature and exercise it against a network
+  card emulated by qemu-system (see [emulate-\*](#emulate---full-system-emulation-with-emulated-hardware)).
 
 Example output (ARMv8 build, run under emulation):
 
@@ -59,12 +64,17 @@ C library:
 crossdemo/
 ├── Cargo.toml
 ├── build.rs                bakes in the compile-time glibc version
-├── justfile                build/test recipes for all three targets
+├── justfile                build/test/run recipes for every method
 ├── README.md
 ├── .cargo/config.toml      cross-linkers + qemu-user runners (in-repo)
-└── src/
-    ├── lib.rs              all platform-introspection logic + tests
-    └── main.rs             thin wrapper that prints the platform info
+├── src/
+│   ├── lib.rs              platform-introspection logic + tests
+│   ├── main.rs             thin wrapper that prints the platform info
+│   └── hardware.rs         NIC probing (only with the `hardware` feature)
+└── emulate/                full-system emulation track
+    ├── setup.sh            downloads the Alpine guest assets
+    ├── run.sh              assembles the initramfs + boots qemu-system
+    └── init                the guest's PID 1 (loads the NIC driver)
 ```
 
 ## Tests
@@ -79,6 +89,9 @@ The suite lives in `src/lib.rs` and runs on every architecture:
   non-glibc builds do not.
 - `glibc_build_version_is_plausible` — the baked-in compile-time glibc
   version, when present, is a well-formed `major.minor` pair.
+- `probe_never_panics`, `known_models_resolve` — *only with the `hardware`
+  feature, in `src/hardware.rs`* — NIC probing never panics, and the
+  chip-ID table resolves the cards QEMU emulates.
 
 The ARM test binaries are executed under **qemu user-mode emulation**, wired
 up via the `runner` keys in `.cargo/config.toml`.
@@ -116,6 +129,23 @@ sudo apt install gcc
 The native x86_64 build needs no cross toolchain or emulator — only the host
 C compiler for the `build.rs` glibc probe. The cross toolchains above supply
 the C compiler used for the ARM probes.
+
+### Emulation track (optional — only for the `emulate-*` recipes)
+
+The full-system emulation track additionally needs full-machine emulators,
+UEFI firmware for the aarch64 guest, `unsquashfs` to unpack the Alpine
+modules, and static-musl Rust targets (the Alpine guests are a musl distro):
+
+```sh
+sudo apt install qemu-system-x86 qemu-system-arm qemu-efi-aarch64 squashfs-tools
+rustup target add x86_64-unknown-linux-musl \
+                  armv7-unknown-linux-musleabihf \
+                  aarch64-unknown-linux-musl
+```
+
+The Alpine guest kernels and root filesystems are **downloaded** by
+`just emulate-setup`; they are large and reproducible, so they are not
+committed (see `emulate/.gitignore`).
 
 ## Building, testing and running with `just`
 
@@ -205,12 +235,54 @@ The image tag is set by the `cross_tag` variable at the top of the
 `justfile`; it must match your `cross` version (`"main"` for a git build of
 cross, the version number for a release).
 
+### emulate-\* — full-system emulation with emulated hardware
+
+The `host-*` and `cross-*` families use qemu **user-mode** emulation, which
+runs a single foreign-architecture *process* and cannot emulate hardware. The
+`emulate-*` family uses qemu **full-system** emulation: it boots a real
+Alpine Linux kernel in a virtual machine with an emulated network card, and
+runs a binary built with the `hardware` Cargo feature so the demo probes that
+card and reports its driver and chip model.
+
+- Binaries are **static-musl** builds (the Alpine guest is a musl distro), so
+  these builds report `C library: musl` rather than glibc.
+- The guest is a small initramfs — an Alpine root filesystem + the binary +
+  the NIC kernel modules — assembled by `emulate/run.sh`, booting to the
+  `emulate/init` script.
+- x86_64 and aarch64 get an emulated Intel **e1000** (PCI); the 32-bit ARM
+  `virt` machine has no PCI host, so armv7 gets a **virtio-net** card on the
+  MMIO transport. The demo reports whichever driver the guest kernel binds.
+- x86_64 runs KVM-accelerated; the ARM guests are fully emulated (slower).
+
+Run `just emulate-setup` once to download the Alpine guest assets.
+
+| Recipe                       | Action                                        |
+|------------------------------|-----------------------------------------------|
+| `just emulate-setup`         | download the Alpine guest assets (one-time)   |
+| `just emulate-build`         | build the hardware-enabled binary, all archs  |
+| `just emulate-build-x86_64`  | build only the x86_64 emulation binary        |
+| `just emulate-build-armv7`   | build only the ARMv7 emulation binary         |
+| `just emulate-build-armv8`   | build only the ARMv8 emulation binary         |
+| `just emulate-test`          | run the test suite with `--features hardware` |
+| `just emulate-run`           | build + boot the guest, all architectures     |
+| `just emulate-run-x86_64`    | build + boot the x86_64 guest                 |
+| `just emulate-run-armv7`     | build + boot the ARMv7 guest                  |
+| `just emulate-run-armv8`     | build + boot the ARMv8 guest                  |
+| `just emulate-exec`          | boot every guest from built binaries          |
+| `just emulate-exec-x86_64`   | boot the x86_64 guest, no rebuild             |
+| `just emulate-exec-armv7`    | boot the ARMv7 guest, no rebuild              |
+| `just emulate-exec-armv8`    | boot the ARMv8 guest, no rebuild              |
+
+`emulate-test` runs host-side — the probing logic is plain sysfs reading; the
+emulated guests are where the `hardware` feature meets a NIC it can identify.
+
 ### Other
 
-| Recipe        | Action                     |
-|---------------|----------------------------|
-| `just`        | list all recipes           |
-| `just clean`  | remove all build artifacts |
+| Recipe              | Action                                           |
+|---------------------|--------------------------------------------------|
+| `just`              | list all recipes                                 |
+| `just clean`        | remove all build artifacts                       |
+| `just emulate-clean`| remove generated initramfs images (keeps assets) |
 
 Built binaries land in `target/<triple>/release/crossdemo`.
 
@@ -242,6 +314,8 @@ does for the host — no manual rebuilds required:
 
 - Under qemu-user, `uname` reports the **host** kernel release. qemu's
   `-r <release>` flag can override this if deterministic output is needed.
-- qemu-user emulates a single Linux process — it cannot emulate hardware
-  (USB, network devices). That requires full-system emulation
-  (`qemu-system-*`) and is intentionally out of scope here.
+- qemu-user emulates a single Linux process and cannot emulate hardware;
+  emulating a network card needs qemu **full-system** emulation, which is
+  what the `emulate-*` recipes do.
+- The `emulate-*` guests run an Alpine kernel, so `uname` there reports the
+  Alpine kernel release (e.g. `6.18.22-0-virt`) rather than the host's.
