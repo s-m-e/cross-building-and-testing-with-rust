@@ -1,0 +1,14 @@
+# Cross-compilation linkers.
+#
+# Building the ARM targets requires the corresponding GCC cross toolchains.
+# On Debian/Ubuntu:
+#
+#   sudo apt install gcc-arm-linux-gnueabihf gcc-aarch64-linux-gnu
+#
+# The native x86_64 target needs no special configuration.
+
+[target.armv7-unknown-linux-gnueabihf]
+linker = "arm-linux-gnueabihf-gcc"
+
+[target.aarch64-unknown-linux-gnu]
+linker = "aarch64-linux-gnu-gcc"

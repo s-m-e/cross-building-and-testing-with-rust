@@ -1,0 +1,21 @@
+[package]
+name = "crossdemo"
+version = "0.1.0"
+edition = "2021"
+description = "Tiny cross-platform binary that reports the platform it runs on"
+
+[lib]
+name = "crossdemo"
+path = "src/lib.rs"
+
+[[bin]]
+name = "crossdemo"
+path = "src/main.rs"
+
+[dependencies]
+libc = "0.2"
+
+[profile.release]
+strip = true
+opt-level = "z"
+lto = true
