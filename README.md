@@ -149,6 +149,17 @@ one target individually.
 | `just host-run-x86_64`    | run only the native x86_64 build                    |
 | `just host-run-armv7`     | run the ARMv7 build under qemu-user                 |
 | `just host-run-armv8`     | run the ARMv8 build under qemu-user                 |
+| `just host-exec`          | run all pre-built binaries, no rebuild              |
+| `just host-exec-x86_64`   | run the pre-built x86_64 binary (native)            |
+| `just host-exec-armv7`    | run the pre-built ARMv7 binary under qemu-user      |
+| `just host-exec-armv8`    | run the pre-built ARMv8 binary under qemu-user      |
+
+Unlike `host-run-*`, the `host-exec-*` recipes **never rebuild** — they just
+execute whatever binary is already in `target/<triple>/release/`. This is the
+way to run an artifact produced by a `cross-*` recipe under the *host's*
+qemu-user: e.g. `just cross-build-armv7` then `just host-exec-armv7`. Doing
+that often shows a different `glibc (built against)` value (the cross image's
+glibc) than `glibc (runtime)` (the host sysroot's).
 
 ### cross-\* — Docker-based, via `cross`
 

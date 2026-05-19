@@ -66,6 +66,26 @@ host-run-armv7: (host-run-target armv7)
 # Run the ARMv8 (64-bit) build under qemu-user.
 host-run-armv8: (host-run-target armv8)
 
+# Run an *already-built* release binary under host qemu-user, with no
+# rebuild — handy for running an artifact produced by the `cross-*` recipes
+# on the host's qemu. Build the binary first (`host-build-*` or
+# `cross-build-*`); these recipes only execute what is already in target/.
+
+# Run all three pre-built release binaries via the host.
+host-exec: host-exec-x86_64 host-exec-armv7 host-exec-armv8
+
+# Run the pre-built x86_64 binary directly (native, no emulation).
+host-exec-x86_64:
+    target/{{x86_64}}/release/crossdemo
+
+# Run the pre-built ARMv7 (32-bit) binary under host qemu-user.
+host-exec-armv7:
+    qemu-arm -L /usr/arm-linux-gnueabihf target/{{armv7}}/release/crossdemo
+
+# Run the pre-built ARMv8 (64-bit) binary under host qemu-user.
+host-exec-armv8:
+    qemu-aarch64 -L /usr/aarch64-linux-gnu target/{{armv8}}/release/crossdemo
+
 # === cross: Docker-based cross-compilation ================================
 #
 # `cross` is a drop-in cargo replacement that builds, tests and runs each
