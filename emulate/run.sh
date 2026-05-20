@@ -4,11 +4,17 @@
 # The guest loads the NIC driver and runs the crossdemo binary, whose
 # `hardware` feature probes that card.
 #
-# Usage: emulate/run.sh <x86_64|armv7|aarch64>
-# Driven by the justfile `emulate-run` / `emulate-exec` recipes.
+# Usage: emulate/run.sh <x86_64|armv7|aarch64> [binary]
+#
+# Without [binary] the release crossdemo binary for the matching musl target
+# is used. With [binary] the given file is placed in the initramfs instead —
+# used by emulate/test-vm.sh to run the cargo test binary inside the guest.
+#
+# Driven by the justfile `emulate-run` / `emulate-exec` / `emulate-test-vm`
+# recipes.
 set -eu
 
-arch=${1:?usage: run.sh <x86_64|armv7|aarch64>}
+arch=${1:?usage: run.sh <x86_64|armv7|aarch64> [binary]}
 here=$(cd "$(dirname "$0")" && pwd)
 root=$(dirname "$here")
 
@@ -45,7 +51,7 @@ case "$arch" in
 esac
 
 assets="$root/emulate/assets/$arch"
-binary="$root/target/$triple/release/crossdemo"
+binary=${2:-"$root/target/$triple/release/crossdemo"}
 build="$root/emulate/build/$arch"
 
 [ -f "$assets/boot/vmlinuz" ] || { echo "run.sh: Alpine assets for $arch missing — run 'just emulate-setup'" >&2; exit 1; }

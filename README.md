@@ -74,6 +74,7 @@ crossdemo/
 └── emulate/                full-system emulation track
     ├── setup.sh            downloads the Alpine guest assets
     ├── run.sh              assembles the initramfs + boots qemu-system
+    ├── test-vm.sh          boots the cargo test binary inside a guest
     └── init                the guest's PID 1 (loads the NIC driver)
 ```
 
@@ -92,6 +93,11 @@ The suite lives in `src/lib.rs` and runs on every architecture:
 - `probe_never_panics`, `known_models_resolve` — *only with the `hardware`
   feature, in `src/hardware.rs`* — NIC probing never panics, and the
   chip-ID table resolves the cards QEMU emulates.
+- `vm_emulated_nic_is_a_qemu_chip` — *only when the test binary is built
+  static-musl* — the first NIC the probe finds is bound to one of QEMU's
+  emulated drivers (`e1000` / `virtio_net`). This would fail against
+  arbitrary host hardware, so it is gated to musl and only meaningful when
+  run inside an `emulate-test-vm-*` guest.
 
 The ARM test binaries are executed under **qemu user-mode emulation**, wired
 up via the `runner` keys in `.cargo/config.toml`.
@@ -137,11 +143,14 @@ UEFI firmware for the aarch64 guest, `unsquashfs` to unpack the Alpine
 modules, and static-musl Rust targets (the Alpine guests are a musl distro):
 
 ```sh
-sudo apt install qemu-system-x86 qemu-system-arm qemu-efi-aarch64 squashfs-tools
+sudo apt install qemu-system-x86 qemu-system-arm qemu-efi-aarch64 squashfs-tools jq
 rustup target add x86_64-unknown-linux-musl \
                   armv7-unknown-linux-musleabihf \
                   aarch64-unknown-linux-musl
 ```
+
+`jq` is used by `emulate/test-vm.sh` to find the cargo-built test binary
+inside `target/`.
 
 The Alpine guest kernels and root filesystems are **downloaded** by
 `just emulate-setup`; they are large and reproducible, so they are not
@@ -263,7 +272,11 @@ Run `just emulate-setup` once to download the Alpine guest assets.
 | `just emulate-build-x86_64`  | build only the x86_64 emulation binary        |
 | `just emulate-build-armv7`   | build only the ARMv7 emulation binary         |
 | `just emulate-build-armv8`   | build only the ARMv8 emulation binary         |
-| `just emulate-test`          | run the test suite with `--features hardware` |
+| `just emulate-test`          | run the test suite *on the host*, fast        |
+| `just emulate-test-vm`       | run the test suite *inside* every guest       |
+| `just emulate-test-vm-x86_64`| run the test suite inside the x86_64 guest    |
+| `just emulate-test-vm-armv7` | run the test suite inside the ARMv7 guest     |
+| `just emulate-test-vm-armv8` | run the test suite inside the ARMv8 guest     |
 | `just emulate-run`           | build + boot the guest, all architectures     |
 | `just emulate-run-x86_64`    | build + boot the x86_64 guest                 |
 | `just emulate-run-armv7`     | build + boot the ARMv7 guest                  |
@@ -273,8 +286,17 @@ Run `just emulate-setup` once to download the Alpine guest assets.
 | `just emulate-exec-armv7`    | boot the ARMv7 guest, no rebuild              |
 | `just emulate-exec-armv8`    | boot the ARMv8 guest, no rebuild              |
 
-`emulate-test` runs host-side — the probing logic is plain sysfs reading; the
-emulated guests are where the `hardware` feature meets a NIC it can identify.
+There are two flavours of test:
+
+- **`emulate-test`** runs the suite *on the host* (fast, no VM). Six tests;
+  the musl-only `vm_emulated_nic_is_a_qemu_chip` is excluded by `cfg`.
+- **`emulate-test-vm-*`** builds the cargo test binary for the matching musl
+  target (`cargo test --no-run`), drops it into the initramfs as the guest's
+  payload, boots the VM, and reads libtest's verdict from the serial
+  console. Seven tests pass, including the integration test that asserts the
+  bound NIC driver is one of QEMU's emulated chips. This is a full
+  round-trip: same code, executed inside an actual emulated machine against
+  an actual emulated NIC.
 
 ### Other
 

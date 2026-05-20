@@ -113,4 +113,21 @@ mod tests {
         assert!(lookup_model("554d4551", "0001").is_some());
         assert!(lookup_model("dead", "beef").is_none());
     }
+
+    /// Integration test for the emulation guests: when we are built static-
+    /// musl (i.e. for the `emulate-*` track), the first NIC the probe finds
+    /// must be bound to a driver we recognise as something QEMU emulates.
+    /// On a real host with arbitrary hardware this would fail, so it is
+    /// compiled only for musl targets and is meaningful only when run inside
+    /// a `just emulate-test-vm-*` VM.
+    #[cfg(target_env = "musl")]
+    #[test]
+    fn vm_emulated_nic_is_a_qemu_chip() {
+        let nic = probe_first_nic().expect("guest must expose a physical NIC");
+        let driver = nic.driver.expect("a driver must be bound to the NIC");
+        assert!(
+            matches!(driver.as_str(), "e1000" | "virtio_net"),
+            "expected an emulated QEMU NIC driver, got {driver:?}"
+        );
+    }
 }

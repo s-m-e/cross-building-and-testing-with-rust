@@ -216,9 +216,24 @@ emulate-build-armv7: (emulate-build-target armv7_musl)
 # Build only the ARMv8 (64-bit) emulation binary.
 emulate-build-armv8: (emulate-build-target armv8_musl)
 
-# Run the test suite with the `hardware` feature active (host-side).
+# Run the test suite with the `hardware` feature active (host-side, fast).
 emulate-test:
     cargo test --features hardware
+
+# Run the test suite inside every emulated guest.
+emulate-test-vm: emulate-test-vm-x86_64 emulate-test-vm-armv7 emulate-test-vm-armv8
+
+# Run the test suite inside the x86_64 guest (KVM, fast).
+emulate-test-vm-x86_64:
+    emulate/test-vm.sh x86_64
+
+# Run the test suite inside the ARMv7 (32-bit) guest (emulated, slow).
+emulate-test-vm-armv7:
+    emulate/test-vm.sh armv7
+
+# Run the test suite inside the ARMv8 (64-bit) guest (emulated, slow).
+emulate-test-vm-armv8:
+    emulate/test-vm.sh aarch64
 
 # Build, then boot the emulated guest for every architecture.
 emulate-run: emulate-run-x86_64 emulate-run-armv7 emulate-run-armv8
